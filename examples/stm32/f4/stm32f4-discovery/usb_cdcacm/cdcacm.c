@@ -17,12 +17,21 @@
  * along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "rtos/FreeRTOS.h"
+#include "rtos/task.h"
+
 #include <stdlib.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/usb/usbd.h>
 #include <libopencm3/usb/cdc.h>
 #include <libopencm3/cm3/scb.h>
+
+static usbd_device *usbd_dev;
+
+static volatile bool initialized = false;
+
+static char s[] = "north";
 
 static const struct usb_device_descriptor dev = {
 	.bLength = USB_DT_DEVICE_SIZE,
@@ -220,12 +229,35 @@ static void cdcacm_set_config(usbd_device *usbd_dev, uint16_t wValue)
 				USB_REQ_TYPE_CLASS | USB_REQ_TYPE_INTERFACE,
 				USB_REQ_TYPE_TYPE | USB_REQ_TYPE_RECIPIENT,
 				cdcacm_control_request);
+
+    initialized = true;
+}
+
+static void usb_task(void *arg __attribute__((unused)))
+{
+    usbd_device *udev = (usbd_device *)arg;
+
+    uint16_t c = 0;
+
+    while (1)
+    {
+        usbd_poll(usbd_dev);
+        if ( initialized )
+        {
+            c++;
+            if ( c == 50000 )
+            {
+                usbd_ep_write_packet(usbd_dev,0x82,s,sizeof(s));
+                c = 0;
+            }
+            else
+                taskYIELD();
+        }
+    }
 }
 
 int main(void)
 {
-	usbd_device *usbd_dev;
-
 	rcc_clock_setup_pll(&rcc_hse_8mhz_3v3[RCC_CLOCK_3V3_168MHZ]);
 
 	rcc_periph_clock_enable(RCC_GPIOA);
@@ -240,7 +272,10 @@ int main(void)
 
 	usbd_register_set_config_callback(usbd_dev, cdcacm_set_config);
 
-	while (1) {
-		usbd_poll(usbd_dev);
-	}
+    xTaskCreate(usb_task,"usb_task",200,usbd_dev,configMAX_PRIORITIES-1,NULL);
+    vTaskStartScheduler();
+
+    for (;;);
+    return 0;
 }
+

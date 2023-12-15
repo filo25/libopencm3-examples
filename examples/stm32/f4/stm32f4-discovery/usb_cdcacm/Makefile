@@ -17,6 +17,8 @@
 ## along with this library.  If not, see <http://www.gnu.org/licenses/>.
 ##
 
+OBJS = rtos/heap_4.o rtos/list.o rtos/port.o rtos/queue.o rtos/tasks.o rtos/opencm3.o
+
 BINARY = cdcacm
 
 LDSCRIPT = ../stm32f4-discovery.ld
